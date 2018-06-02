@@ -8,7 +8,7 @@ std::mt19937 g_mt(g_rd());
 static const float c_pi = 3.14159265359f;
 
 // y = sin(x)^2
-struct SinX_Squared
+struct Function_SinX_Squared
 {
     static const char* Name()
     {
@@ -28,25 +28,43 @@ struct SinX_Squared
     }
 };
 
+struct PDF_Uniform
+{
+    static const char* Name()
+    {
+        return "Uniform Random Variables";
+    }
+
+    static float Generate(float rangeMin, float rangeMax)
+    {
+        std::uniform_real_distribution<float> dist(rangeMin, rangeMax);
+        return dist(g_mt);
+    }
+
+    static float PDF(float x, float rangeMin, float rangeMax)
+    {
+        return 1.0f / (rangeMax - rangeMin);
+    }
+};
+
 float Lerp(float a, float b, float t)
 {
     return a * (1 - t) + b * t;
 }
 
-template <typename FUNCTION, size_t NUM_SAMPLES>
+template <typename FUNCTION, typename PDF, size_t NUM_SAMPLES>
 float MonteCarloIntegrate(float rangeMin, float rangeMax)
 {
     // get the actual answer
     float actualAnswer = FUNCTION::IndefiniteIntegral(rangeMax) - FUNCTION::IndefiniteIntegral(rangeMin);
 
     // integrate!
-    float range = rangeMax - rangeMin;
     float integration = 0.0f;
-    std::uniform_real_distribution<float> dist(rangeMin, rangeMax);
     for (size_t i = 1; i <= NUM_SAMPLES; ++i)
     {
-        float x = dist(g_mt);
-        float estimate = range * FUNCTION::F(x);
+        float x = PDF::Generate(rangeMin, rangeMax);
+        float pdf = PDF::PDF(x, rangeMin, rangeMax);
+        float estimate = FUNCTION::F(x) / pdf;
         integration = Lerp(integration, estimate, 1.0f / float(i));
     }
 
@@ -54,7 +72,7 @@ float MonteCarloIntegrate(float rangeMin, float rangeMax)
     return fabs(integration - actualAnswer);
 }
 
-template <typename FUNCTION, size_t NUM_SAMPLES, size_t NUM_TESTS>
+template <typename FUNCTION, typename PDF, size_t NUM_SAMPLES, size_t NUM_TESTS>
 void DoTests(float rangeMin, float rangeMax)
 {
     float minError = 0.0f;
@@ -63,7 +81,7 @@ void DoTests(float rangeMin, float rangeMax)
 
     for (size_t i = 1; i <= NUM_TESTS; ++i)
     {
-        float error = MonteCarloIntegrate<FUNCTION, NUM_SAMPLES>(rangeMin, rangeMax);
+        float error = MonteCarloIntegrate<FUNCTION, PDF, NUM_SAMPLES>(rangeMin, rangeMax);
 
         if (i == 1 || error < minError)
             minError = error;
@@ -75,31 +93,31 @@ void DoTests(float rangeMin, float rangeMax)
     }
 
     float actualAnswer = FUNCTION::IndefiniteIntegral(rangeMax) - FUNCTION::IndefiniteIntegral(rangeMin);
+    printf("Integrating %s using %s\n", FUNCTION::Name(), PDF::Name());
     printf("The actual integral of %s from %f to %f is %f\n", FUNCTION::Name(), rangeMin, rangeMax, actualAnswer);
     printf("Doing Monte Carlo integration...\n");
-    printf("%zu runs, each taking %zu samples\n", NUM_TESTS, NUM_SAMPLES);
-    printf("  min: %f\n", minError);
-    printf("  max: %f\n", maxError);
-    printf("  avg: %f\n", averageError);
+    printf("%zu runs, each taking %zu samples each run:\n", NUM_TESTS, NUM_SAMPLES);
+    printf("  min Error: %f\n", minError);
+    printf("  max Error: %f\n", maxError);
+    printf("  avg Error: %f\n\n", averageError);
 }
 
 int main(int argc, char** argv)
 {
-    DoTests<SinX_Squared, 40000, 1000>(0.0f, c_pi);
+    DoTests<Function_SinX_Squared, PDF_Uniform, 625, 1000>(0.0f, c_pi);
+    DoTests<Function_SinX_Squared, PDF_Uniform, 2500, 1000>(0.0f, c_pi);
+    DoTests<Function_SinX_Squared, PDF_Uniform, 10000, 1000>(0.0f, c_pi);
+    DoTests<Function_SinX_Squared, PDF_Uniform, 40000, 1000>(0.0f, c_pi);
+
+    // TODO: can we invert sin(x) and use that to generate randon numbers?
+
+    // TODO: also use a PDF that has a different shape!
 
     system("pause");
     return 0;
 }
 
 /*
-
-* This line:
- * float x = dist(g_mt);
- * could instead make a "PDF" object, like the function object.
- * it can be asked to get a random number 'x', and also tells you the PDF(x)
- * make one for evenly distributed random numbers
- * make another for a good importance sampling
- * make another for bad importance sampling
 
 Example:
 * integrate y=sin(x)^2 from 0 to pi.
