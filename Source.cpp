@@ -187,10 +187,16 @@ int main(int argc, char** argv)
     looks legit: http://www.wolframalpha.com/input/?i=graph+y+%3D(x+-+sin(x)*cos(x))+%2F+pi+from+0+to+pi
 
     Now to invert the CDF we flip y and X and solve for y again
+
+    It's a bit scary to invert, but luckily there's this:
+
     "The double-angle identity might help you a bit. sin(2theta) = 2sin(theta)cos(theta)"
     https://twitter.com/scottmichaud/status/1003033402411544577
 
-    TODO: continue here, almost there!!
+    So, an alternate form of the CDF is...
+    CDF(x) = (2x - sin(2x)) / (2 * pi)
+
+    TODO: continue here, almost there, if you can get that thing inverted!
 
 
 
