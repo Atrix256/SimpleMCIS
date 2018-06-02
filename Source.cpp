@@ -33,67 +33,73 @@ float Lerp(float a, float b, float t)
     return a * (1 - t) + b * t;
 }
 
-template <typename FUNCTION>
-size_t MonteCarloIntegrate(float rangeMin, float rangeMax, float targetError)
+template <typename FUNCTION, size_t NUM_SAMPLES>
+float MonteCarloIntegrate(float rangeMin, float rangeMax)
 {
     // get the actual answer
     float actualAnswer = FUNCTION::IndefiniteIntegral(rangeMax) - FUNCTION::IndefiniteIntegral(rangeMin);
 
     // integrate!
     float range = rangeMax - rangeMin;
-    std::uniform_real_distribution<float> dist(rangeMin, rangeMax);
-    size_t sampleCount = 0;
     float integration = 0.0f;
-    do
+    std::uniform_real_distribution<float> dist(rangeMin, rangeMax);
+    for (size_t i = 1; i <= NUM_SAMPLES; ++i)
     {
-        ++sampleCount;
         float x = dist(g_mt);
         float estimate = range * FUNCTION::F(x);
-        integration = Lerp(integration, estimate, 1.0f / float(sampleCount));
+        integration = Lerp(integration, estimate, 1.0f / float(i));
     }
-    while (fabs(integration - actualAnswer) > targetError);
 
-    // tell the caller how many samples it took
-    return sampleCount;
+    // tell the caller how much error there is at the end
+    return fabs(integration - actualAnswer);
 }
 
-template <typename FUNCTION, size_t NUM_TESTS>
-void DoTests(float rangeMin, float rangeMax, float targetError)
+template <typename FUNCTION, size_t NUM_SAMPLES, size_t NUM_TESTS>
+void DoTests(float rangeMin, float rangeMax)
 {
-    size_t min = 0;
-    size_t max = 0;
-    float average = 0.0f;
+    float minError = 0.0f;
+    float maxError = 0.0f;
+    float averageError = 0.0f;
 
     for (size_t i = 1; i <= NUM_TESTS; ++i)
     {
-        size_t sampleCount = MonteCarloIntegrate<FUNCTION>(rangeMin, rangeMax, targetError);
+        float error = MonteCarloIntegrate<FUNCTION, NUM_SAMPLES>(rangeMin, rangeMax);
 
-        if (i == 1 || sampleCount < min)
-            min = sampleCount;
+        if (i == 1 || error < minError)
+            minError = error;
         
-        if (i == 1 || sampleCount > max)
-            max = sampleCount;
+        if (i == 1 || error > maxError)
+            maxError = error;
 
-        average = Lerp(average, float(sampleCount), 1.0f / float(i));
+        averageError = Lerp(averageError, error, 1.0f / float(i));
     }
 
     float actualAnswer = FUNCTION::IndefiniteIntegral(rangeMax) - FUNCTION::IndefiniteIntegral(rangeMin);
-    printf("%s from %f to %f = %f\n", FUNCTION::Name(), rangeMin, rangeMax, actualAnswer);
-    printf("%zu runs, to get error <= %f\n", NUM_TESTS, targetError);
-    printf("  min: %zu\n", min);
-    printf("  max: %zu\n", max);
-    printf("  avg: %f\n", average);
+    printf("The actual integral of %s from %f to %f is %f\n", FUNCTION::Name(), rangeMin, rangeMax, actualAnswer);
+    printf("Doing Monte Carlo integration...\n");
+    printf("%zu runs, each taking %zu samples\n", NUM_TESTS, NUM_SAMPLES);
+    printf("  min: %f\n", minError);
+    printf("  max: %f\n", maxError);
+    printf("  avg: %f\n", averageError);
 }
 
 int main(int argc, char** argv)
 {
-    DoTests<SinX_Squared, 1000>(0.0f, c_pi, 0.0001f);
+    DoTests<SinX_Squared, 40000, 1000>(0.0f, c_pi);
 
     system("pause");
     return 0;
 }
 
 /*
+
+* This line:
+ * float x = dist(g_mt);
+ * could instead make a "PDF" object, like the function object.
+ * it can be asked to get a random number 'x', and also tells you the PDF(x)
+ * make one for evenly distributed random numbers
+ * make another for a good importance sampling
+ * make another for bad importance sampling
 
 Example:
 * integrate y=sin(x)^2 from 0 to pi.
@@ -103,6 +109,8 @@ Example:
 
 * I think it would be better to do N runs and then look at the error after that many runs
  * since you don't know the answer going into it, which is more realistic!
+ * note this in the blog - met the error metric within 2-10 samples sometimes, even though the average was 20,000 and the maxes were up at like 1.5 million.
+  * doesn't help though because you don't know the answer so don't know to stop! The next "wrong" answers will quickly push you away from being right ):
 
 
 Blog:
@@ -121,6 +129,7 @@ Blog:
  * demonstrate
 
 * could show empiraclly how you need to quadruple to sample count to get half as much error!
+ * yep!
 
 * link to this code!
 
