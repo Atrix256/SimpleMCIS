@@ -2,13 +2,20 @@
 #include <random>
 #include <stdlib.h>
 
-std::random_device g_rd;
-std::mt19937 g_mt(g_rd());
-
 static const double c_pi = 3.14159265359;
 
-// TODO: /4 is temp!
-static const size_t c_numSamples = 50 * 1000 * 1000;// / 4;
+// Note: the PDF's that were created were created specifically for this range.
+// Changing these values without re-deriving the PDFs will give you wrong answers.
+// You can use the PDFs for new functions on the same interval though.
+static const double c_rangeMin = 0.0f;
+static const double c_rangeMax = c_pi; 
+
+std::random_device g_rd;
+std::mt19937 g_mt(g_rd());
+std::uniform_real_distribution<double> g_dist_0_1(0.0, 1.0);
+std::uniform_real_distribution<double> g_dist_rangeMin_rangeMax(c_rangeMin, c_rangeMax);
+
+static const size_t c_numSamples = 50 * 1000 * 1000;
 
 // y = sin(x)^2
 struct Function_SinX_Squared
@@ -31,6 +38,27 @@ struct Function_SinX_Squared
     }
 };
 
+// y = sin(x)
+struct Function_SinX
+{
+    static const char* Name()
+    {
+        return "y=sin(x)";
+    }
+
+    static double F(double x)
+    {
+        return sin(x);
+    }
+
+    // Indefinite integral from wolfram alpha
+    // http://www.wolframalpha.com/input/?i=integrate+y%3Dsin(x)+from+0+to+pi
+    static double IndefiniteIntegral(double x)
+    {
+        return -cos(x);
+    }
+};
+
 struct PDF_Uniform
 {
     static const char* Name()
@@ -38,33 +66,31 @@ struct PDF_Uniform
         return "PDF y = 1/pi";
     }
 
-    static double Generate(double rangeMin, double rangeMax)
+    static double Generate()
     {
-        std::uniform_real_distribution<double> dist(rangeMin, rangeMax);
-        return dist(g_mt);
+        return g_dist_rangeMin_rangeMax(g_mt);
     }
 
-    static double PDF(double x, double rangeMin, double rangeMax)
+    static double PDF(double x)
     {
-        return 1.0 / (rangeMax - rangeMin);
+        return 1.0 / (c_rangeMax - c_rangeMin);
     }
 };
 
-struct PDF_SineX
+struct PDF_SinX
 {
     static const char* Name()
     {
         return "PDF y=sin(x)/2";
     }
 
-    static double Generate(double rangeMin, double rangeMax)
+    static double Generate()
     {
-        std::uniform_real_distribution<double> dist(0.0, 1.0);
-        double rand = dist(g_mt);
+        double rand = g_dist_0_1(g_mt);
         return 2.0 * asin(sqrt(rand));
     }
 
-    static double PDF(double x, double rangeMin, double rangeMax)
+    static double PDF(double x)
     {
         return sin(x) / 2.0;
     }
@@ -77,23 +103,28 @@ T Lerp(T a, T b, T t)
 }
 
 template <typename FUNCTION>
-void Test_MC(double rangeMin, double rangeMax)
+void Test_MC()
 {
-    double actualAnswer = FUNCTION::IndefiniteIntegral(rangeMax) - FUNCTION::IndefiniteIntegral(rangeMin);
+    double actualAnswer = FUNCTION::IndefiniteIntegral(c_rangeMax) - FUNCTION::IndefiniteIntegral(c_rangeMin);
 
-    printf("Integrating %s from %f to %f\nThe actual answer is %f\n", FUNCTION::Name(), rangeMin, rangeMax, actualAnswer);
+    printf("Integrating %s from %f to %f\nThe actual answer is %f\n", FUNCTION::Name(), c_rangeMin, c_rangeMax, actualAnswer);
     printf("Doing Monte Carlo integration with %zu samples:\n", c_numSamples);
 
-    std::uniform_real_distribution<double> dist(rangeMin, rangeMax);
-    double range = rangeMax - rangeMin;
-    double integration = 0.0f;
+    double range = c_rangeMax - c_rangeMin;
+    double integration = 0.0;
+    double averageDifferenceSquared = 0.0;
     for (size_t i = 1; i <= c_numSamples; ++i)
     {
         // integrate
-        double x = dist(g_mt);
+        double x = g_dist_rangeMin_rangeMax(g_mt);
         double estimate = FUNCTION::F(x) * range;
         integration = Lerp(integration, estimate, 1.0 / double(i));
 
+        // Variance is "The average of the squared differences from the mean"
+        double difference = integration - actualAnswer;
+        double differenceSquared = difference * difference;
+        averageDifferenceSquared = Lerp(averageDifferenceSquared, differenceSquared, 1.0 / double(i));
+
         // report progress at specific progress points
         if (i == c_numSamples / 4096 ||
             i == c_numSamples / 1024 ||
@@ -104,30 +135,34 @@ void Test_MC(double rangeMin, double rangeMax)
             i == c_numSamples)
         {
             double difference = integration - actualAnswer;
-            printf("[%10.zu] %f  (%s%f)\n", i, integration, difference > 0 ? "+" : "", difference);
+            printf("[%10.zu] %f  (%s%f) (estimate stddev: %f)\n", i, integration, difference >= 0 ? "+" : "", difference, sqrt(averageDifferenceSquared));
         }
     }
     printf("\n");
-
-    // TODO: variance? might be important to see variance go down
 }
 
 template <typename FUNCTION, typename PDF>
-void Test_MC_PDF(double rangeMin, double rangeMax)
+void Test_MC_PDF()
 {
-    double actualAnswer = FUNCTION::IndefiniteIntegral(rangeMax) - FUNCTION::IndefiniteIntegral(rangeMin);
+    double actualAnswer = FUNCTION::IndefiniteIntegral(c_rangeMax) - FUNCTION::IndefiniteIntegral(c_rangeMin);
 
-    printf("Integrating %s from %f to %f\nThe actual answer is %f\n", FUNCTION::Name(), rangeMin, rangeMax, actualAnswer);
+    printf("Integrating %s from %f to %f\nThe actual answer is %f\n", FUNCTION::Name(), c_rangeMin, c_rangeMax, actualAnswer);
     printf("Doing Monte Carlo integration with %zu samples, using %s.\nEstimates:\n", c_numSamples, PDF::Name());
 
     double integration = 0.0f;
+    double averageDifferenceSquared = 0.0;
     for (size_t i = 1; i <= c_numSamples; ++i)
     {
         // integrate
-        double x = PDF::Generate(rangeMin, rangeMax);
-        double pdf = PDF::PDF(x, rangeMin, rangeMax);
+        double x = PDF::Generate();
+        double pdf = PDF::PDF(x);
         double estimate = FUNCTION::F(x) / pdf;
         integration = Lerp(integration, estimate, 1.0 / double(i));
+
+        // Variance is "The average of the squared differences from the mean"
+        double difference = integration - actualAnswer;
+        double differenceSquared = difference * difference;
+        averageDifferenceSquared = Lerp(averageDifferenceSquared, differenceSquared, 1.0 / double(i));
 
         // report progress at specific progress points
         if (i == c_numSamples / 4096 ||
@@ -139,27 +174,28 @@ void Test_MC_PDF(double rangeMin, double rangeMax)
             i == c_numSamples)
         {
             double difference = integration - actualAnswer;
-            printf("[%10.zu] %f  (%s%f)\n", i, integration, difference > 0 ? "+" : "", difference);
+            printf("[%10.zu] %f  (%s%f) (estimate stddev: %f)\n", i, integration, difference >= 0 ? "+" : "", difference, sqrt(averageDifferenceSquared));
         }
     }
     printf("\n");
-
-    // TODO: variance? might be important to see variance go down
 }
 
 int main(int argc, char** argv)
 {
-    Test_MC<Function_SinX_Squared>(0.0f, c_pi);
-    Test_MC_PDF<Function_SinX_Squared, PDF_Uniform>(0.0f, c_pi);
-    Test_MC_PDF<Function_SinX_Squared, PDF_SineX>(0.0f, c_pi);
+    Test_MC<Function_SinX_Squared>();
+    Test_MC_PDF<Function_SinX_Squared, PDF_Uniform>();
+    Test_MC_PDF<Function_SinX_Squared, PDF_SinX>();
 
+    Test_MC_PDF<Function_SinX, PDF_Uniform>();
+    Test_MC_PDF<Function_SinX, PDF_SinX>();
 
     /*
     Process New - for blog
 
     TODO: put the derivations in a special section at the end so the post doesn't get all clogged up with math
-    TODO: sin(x)^2
-    TODO: cos(x)
+    TODO: quadratic fit (stuck) - could try a cubic fit on inverted CDF data
+    TODO: sin(x)^2 (stuck)
+    TODO: cos(x) (should be easy to do)
 
 
     ----- Sin(x)^2 PDF -----
@@ -317,8 +353,9 @@ int main(int argc, char** argv)
 }
 
 /*
-
-
+! it could be fun to make a program where you give it a function and it gives you a curve fit based PDF and inverted CDF
+ ? how would that work exactly
+ * if curve fitting one, it would be nice to generate the other as a complement to it, so there isn't two fudge amounts there.
 
 Example:
 * integrate y=sin(x)^2 from 0 to pi.
