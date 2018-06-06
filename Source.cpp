@@ -63,7 +63,7 @@ struct PDF_Uniform
 {
     static const char* Name()
     {
-        return "PDF y = 1/pi";
+        return "PDF y=1/pi";
     }
 
     static double Generate()
@@ -93,6 +93,63 @@ struct PDF_SinX
     static double PDF(double x)
     {
         return sin(x) / 2.0;
+    }
+};
+
+struct PDF_CosXOver2Over2
+{
+    static const char* Name()
+    {
+        return "PDF y=cos(x/2)/2";
+    }
+
+    static double Generate()
+    {
+        double rand = g_dist_0_1(g_mt);
+        return 2.0 * asin(rand);
+    }
+
+    static double PDF(double x)
+    {
+        return cos(x/2.0) / 2.0;
+    }
+};
+
+struct PDF_XOverPiToTheFifth
+{
+    static const char* Name()
+    {
+        return "PDF y=(x/pi)^5 * 6.0 / pi";
+    }
+
+    static double Generate()
+    {
+        double rand = g_dist_0_1(g_mt);
+        return pow(rand * pow(c_pi, 5.0), 0.2);
+    }
+
+    static double PDF(double x)
+    {
+        return pow(x / c_pi, 5.0) * 6.0 / c_pi;
+    }
+};
+
+struct PDF_XOverPiToTheSecond
+{
+    static const char* Name()
+    {
+        return "PDF y=(x/pi)^2 * 3.0 / pi";
+    }
+
+    static double Generate()
+    {
+        double rand = g_dist_0_1(g_mt);
+        return pow(rand * pow(c_pi, 3.0), 1.0 / 3.0);
+    }
+
+    static double PDF(double x)
+    {
+        return pow(x / c_pi, 2.0) * 3.0 / c_pi;
     }
 };
 
@@ -126,6 +183,32 @@ double SimpleMonteCarlo()
     double height = yAverage;
 
     return width * height;
+}
+
+double GeneralMonteCarlo()
+{
+    double rangeMin = 0;
+    double rangeMax = 3.14159265359;
+
+    size_t numSamples = 10000;
+
+    std::random_device rd;
+    std::mt19937 mt(rd());
+    std::uniform_real_distribution<double> dist(rangeMin, rangeMax);
+
+    double estimateSum = 0.0;
+    for (size_t i = 1; i <= numSamples; ++i)
+    {
+        double x = dist(mt);
+        double y = sin(x)*sin(x);
+        double PDF = 1.0 / c_pi; // uniform random numbers from 0 to pi
+        double estimate = y / PDF;
+
+        estimateSum += estimate;
+    }
+    double estimateAverage = estimateSum / double(numSamples);
+
+    return estimateAverage;
 }
 
 template <typename FUNCTION>
@@ -208,14 +291,23 @@ void Test_MC_PDF()
 
 int main(int argc, char** argv)
 {
-    printf("Simple Monte Carlo says: %f\n\n", SimpleMonteCarlo());
+    //printf("Simple Monte Carlo says: %f\n\n", SimpleMonteCarlo());
+    //printf("General Monte Carlo says: %f\n\n", GeneralMonteCarlo());
 
     Test_MC<Function_SinX_Squared>();
     Test_MC_PDF<Function_SinX_Squared, PDF_Uniform>();
     Test_MC_PDF<Function_SinX_Squared, PDF_SinX>();
+    Test_MC_PDF<Function_SinX_Squared, PDF_CosXOver2Over2>();
+    Test_MC_PDF<Function_SinX_Squared, PDF_XOverPiToTheFifth>();
+    Test_MC_PDF<Function_SinX_Squared, PDF_XOverPiToTheSecond>();
 
     Test_MC_PDF<Function_SinX, PDF_Uniform>();
     Test_MC_PDF<Function_SinX, PDF_SinX>();
+
+
+    // TODO: (x/pi)^5 is probably too aggressive. try a lower power. maybe ^2?
+    // TODO: (x/pi)^5 is wrong! when making the H and CDF functions, used the wrong function for G(x). Fix and retest!
+
 
     /*
     Process New - for blog
@@ -226,11 +318,129 @@ int main(int argc, char** argv)
     TODO: cos(x) (should be easy to do)
 
 
+    ----- (x/pi)^2 -----
+
+    F(x) = (x/pi)^2
+
+    Integrate that and we get: G(x) = x^3 / (3*pi^2)
+
+    We can get the normalization constant for the PDF by taking G(pi) - G(0). Do that and you get: pi/3
+
+    So, PDF(x) = (x/pi)^2 * 3/pi
+
+    To make G be the CDF so that we can invert it, we need to make sure that CDF(0) is 0 and CDF(pi) is 1.
+
+    So we do this:
+
+    H(x) = G(x) - G(0)
+    CDF(x) = H(x) / H(pi)
+
+    H(x) = x^3 / (3*pi^2)
+    CDF(x) = x^3 / pi^3
+    
+    looks decent: http://www.wolframalpha.com/input/?i=x%5E3+%2F+pi%5E3+from+0+to+pi
+
+    Now to invert the CDF we flip y and X and solve for y again
+
+    CDF^-1(x) = (y * pi^3)^(1/3)
+
+
+    ----- (x/pi)^5 -----
+
+    F(x) = (x/pi)^5
+
+    Integrate that and we get: G(x) = x^6 / (6*pi^5)
+
+    We can get the normalization constant for the PDF by taking G(pi) - G(0). Do that and you get: pi/6
+
+    So, PDF(x) = (x/pi)^5 * 6/pi
+
+    To make G be the CDF so that we can invert it, we need to make sure that CDF(0) is 0 and CDF(pi) is 1.
+
+    So we do this:
+
+    H(x) = G(x) - G(0)
+    CDF(x) = H(x) / H(pi)
+
+    H(X) = (x/pi)^5 * 6/pi
+    CDF(x) = x^5 / pi^5
+
+    looks decent: http://www.wolframalpha.com/input/?i=x%5E5+%2F+pi%5E5+from+0+to+pi
+
+    Now to invert the CDF we flip y and X and solve for y again
+
+    CDF^-1(x) = (x * pi^5)^(1/5)
+
+    looks legit: http://www.wolframalpha.com/input/?i=y%3D+(x+*+pi%5E5)%5E(1%2F5)+from+0+to+1
+
+
+    ----- cos(x/2) PDF -----
+
+    F(x) = cos(x/2)
+
+    Integrate that and we get: G(x) = 2 * sin(x/2)
+
+    We can get the normalization constant for the PDF by taking G(pi) - G(0). Do that and you get: 2
+
+    So, PDF(x) = cos(x/2) / 2
+
+    To make G be the CDF so that we can invert it, we need to make sure that CDF(0) is 0 and CDF(pi) is 1.
+
+    So we do this:
+
+    H(x) = G(x) - G(0)
+    CDF(x) = H(x) / H(pi)
+
+    H(x) = 2*sin(x/2)
+    CDF(x) = sin(x/2)
+
+    looks good: http://www.wolframalpha.com/input/?i=sin(x%2F2)+from+0+to+pi
+
+    Now to invert the CDF we flip y and X and solve for y again
+
+    CDF^-1 is
+    y = 2 * (2 * pi * n - sin^(-1)(x) + pi) and n in Z
+
+    actually the other answer...
+    y = 2 (2 pi n + sin^(-1)(x)) and n element Z
+
+    Yep!
+
+    y = 2 * sin^(-1)(x)
+
+    !!! convergence isn't so different. need to find a better function.
+
+    ----- 1-Sin(x) PDF -----
+
+    F(x) = 1 - sin(x)
+
+    Integrate that and we get: G(x) = x+cos(x)
+
+    We can get the normalization constant for the PDF by taking G(pi) - G(0). Do that and you get pi - 2
+
+    So, PDF(x) = (1-sin(x)) / (pi-2)
+
+    To make G be the CDF so that we can invert it, we need to make sure that CDF(0) is 0 and CDF(pi) is 1.
+
+    So we do this:
+
+    H(x) = G(x) - G(0)
+    CDF(x) = H(x) / H(pi)
+
+    H(x) = x+cos(x)-1
+    CDF(x) = (x+cos(x)-1) / (pi-2)
+
+    looks good: http://www.wolframalpha.com/input/?i=graph+(x%2Bcos(x)-1)+%2F+(pi-2)+from+0+to+pi
+
+    Now to invert the CDF we flip y and X and solve for y again
+
+    !!! CRAP. x+cos(x) not invertible, i'm stuck.
+
     ----- Sin(x)^2 PDF -----
 
     What if we use a PDF that exactly matches the function we are integrating?! (NOTE: this is what cosine weighted hemispher sampling does!)
 
-    F(x) sin(x)^2
+    F(x) = sin(x)^2
 
     Integrate that and we get: G(x) = 1/2 (x - sin(x)*cos(x))
 
