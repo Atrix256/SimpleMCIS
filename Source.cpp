@@ -125,7 +125,7 @@ struct PDF_XOverPiToTheFifth
     static double Generate()
     {
         double rand = g_dist_0_1(g_mt);
-        return pow(rand * pow(c_pi, 5.0), 0.2);
+        return pow(rand * pow(c_pi, 6.0), 1.0 / 6.0);
     }
 
     static double PDF(double x)
@@ -235,7 +235,8 @@ void Test_MC()
         averageDifferenceSquared = Lerp(averageDifferenceSquared, differenceSquared, 1.0 / double(i));
 
         // report progress at specific progress points
-        if (i == c_numSamples / 4096 ||
+        if (i == 1 || 
+            i == c_numSamples / 4096 ||
             i == c_numSamples / 1024 ||
             i == c_numSamples / 256 ||
             i == c_numSamples / 64 ||
@@ -274,7 +275,8 @@ void Test_MC_PDF()
         averageDifferenceSquared = Lerp(averageDifferenceSquared, differenceSquared, 1.0 / double(i));
 
         // report progress at specific progress points
-        if (i == c_numSamples / 4096 ||
+        if (i == 1 ||
+            i == c_numSamples / 4096 ||
             i == c_numSamples / 1024 ||
             i == c_numSamples / 256 ||
             i == c_numSamples / 64 ||
@@ -303,10 +305,6 @@ int main(int argc, char** argv)
 
     Test_MC_PDF<Function_SinX, PDF_Uniform>();
     Test_MC_PDF<Function_SinX, PDF_SinX>();
-
-
-    // TODO: (x/pi)^5 is probably too aggressive. try a lower power. maybe ^2?
-    // TODO: (x/pi)^5 is wrong! when making the H and CDF functions, used the wrong function for G(x). Fix and retest!
 
 
     /*
@@ -362,16 +360,16 @@ int main(int argc, char** argv)
     H(x) = G(x) - G(0)
     CDF(x) = H(x) / H(pi)
 
-    H(X) = (x/pi)^5 * 6/pi
-    CDF(x) = x^5 / pi^5
+    H(X) = x^6 / (6*pi^5)
+    CDF(x) = x^6 / pi^6
 
-    looks decent: http://www.wolframalpha.com/input/?i=x%5E5+%2F+pi%5E5+from+0+to+pi
+    looks decent: http://www.wolframalpha.com/input/?i=x%5E6+%2F+pi%5E6+from+0+to+pi
 
     Now to invert the CDF we flip y and X and solve for y again
 
-    CDF^-1(x) = (x * pi^5)^(1/5)
+    CDF^-1(x) = (y * pi^6)^(1/6)
 
-    looks legit: http://www.wolframalpha.com/input/?i=y%3D+(x+*+pi%5E5)%5E(1%2F5)+from+0+to+1
+    looks legit: http://www.wolframalpha.com/input/?i=(y+*+pi%5E6)%5E(1%2F6)+from+0+to+1
 
 
     ----- cos(x/2) PDF -----
