@@ -211,6 +211,33 @@ double GeneralMonteCarlo()
     return estimateAverage;
 }
 
+double ImportanceSampledMonteCarlo()
+{
+    double rangeMin = 0;
+    double rangeMax = 3.14159265359;
+
+    size_t numSamples = 10000;
+
+    std::random_device rd;
+    std::mt19937 mt(rd());
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    double estimateSum = 0.0;
+    for (size_t i = 1; i <= numSamples; ++i)
+    {
+        double rng = dist(mt);
+        double x = 2.0 * asin(sqrt(rng));
+        double y = sin(x)*sin(x);
+        double PDF = sin(x) / 2.0f;
+        double estimate = y / PDF;
+
+        estimateSum += estimate;
+    }
+    double estimateAverage = estimateSum / double(numSamples);
+
+    return estimateAverage;
+}
+
 template <typename FUNCTION>
 void Test_MC()
 {
@@ -293,8 +320,9 @@ void Test_MC_PDF()
 
 int main(int argc, char** argv)
 {
-    //printf("Simple Monte Carlo says: %f\n\n", SimpleMonteCarlo());
-    //printf("General Monte Carlo says: %f\n\n", GeneralMonteCarlo());
+    printf("Simple Monte Carlo says: %f\n\n", SimpleMonteCarlo());
+    printf("General Monte Carlo says: %f\n\n", GeneralMonteCarlo());
+    printf("Importance Sampled Monte Carlo says: %f\n\n", ImportanceSampledMonteCarlo());
 
     Test_MC<Function_SinX_Squared>();
     Test_MC_PDF<Function_SinX_Squared, PDF_Uniform>();
@@ -305,6 +333,8 @@ int main(int argc, char** argv)
 
     Test_MC_PDF<Function_SinX, PDF_Uniform>();
     Test_MC_PDF<Function_SinX, PDF_SinX>();
+
+    // TODO: make a simple monte carlo with importance sampling
 
 
     /*
