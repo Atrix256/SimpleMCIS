@@ -13,7 +13,6 @@ static const double c_rangeMax = c_pi;
 std::random_device g_rd;
 std::mt19937 g_mt(g_rd());
 std::uniform_real_distribution<double> g_dist_0_1(0.0, 1.0);
-std::uniform_real_distribution<double> g_dist_rangeMin_rangeMax(c_rangeMin, c_rangeMax);
 
 static const size_t c_numSamples = 50 * 1000 * 1000;
 
@@ -66,14 +65,14 @@ struct PDF_Uniform
         return "PDF y=1/pi";
     }
 
-    static double Generate()
+    static double InverseCDF(double rnd)
     {
-        return g_dist_rangeMin_rangeMax(g_mt);
+        return rnd * c_pi;
     }
 
     static double PDF(double x)
     {
-        return 1.0 / (c_rangeMax - c_rangeMin);
+        return 1.0 / c_pi;
     }
 };
 
@@ -84,10 +83,9 @@ struct PDF_SinX
         return "PDF y=sin(x)/2";
     }
 
-    static double Generate()
+    static double InverseCDF(double rnd)
     {
-        double rand = g_dist_0_1(g_mt);
-        return 2.0 * asin(sqrt(rand));
+        return 2.0 * asin(sqrt(rnd));
     }
 
     static double PDF(double x)
@@ -103,10 +101,9 @@ struct PDF_CosXOver2Over2
         return "PDF y=cos(x/2)/2";
     }
 
-    static double Generate()
+    static double InverseCDF(double rnd)
     {
-        double rand = g_dist_0_1(g_mt);
-        return 2.0 * asin(rand);
+        return 2.0 * asin(rnd);
     }
 
     static double PDF(double x)
@@ -122,10 +119,9 @@ struct PDF_XOverPiToTheFifth
         return "PDF y=(x/pi)^5 * 6.0 / pi";
     }
 
-    static double Generate()
+    static double InverseCDF(double rnd)
     {
-        double rand = g_dist_0_1(g_mt);
-        return pow(rand * pow(c_pi, 6.0), 1.0 / 6.0);
+        return pow(rnd * pow(c_pi, 6.0), 1.0 / 6.0);
     }
 
     static double PDF(double x)
@@ -141,10 +137,9 @@ struct PDF_XOverPiToTheSecond
         return "PDF y=(x/pi)^2 * 3.0 / pi";
     }
 
-    static double Generate()
+    static double InverseCDF(double rnd)
     {
-        double rand = g_dist_0_1(g_mt);
-        return pow(rand * pow(c_pi, 3.0), 1.0 / 3.0);
+        return pow(rnd * pow(c_pi, 3.0), 1.0 / 3.0);
     }
 
     static double PDF(double x)
@@ -187,22 +182,30 @@ double SimpleMonteCarlo()
 
 double GeneralMonteCarlo()
 {
-    double rangeMin = 0;
-    double rangeMax = 3.14159265359;
-
     size_t numSamples = 10000;
 
     std::random_device rd;
     std::mt19937 mt(rd());
-    std::uniform_real_distribution<double> dist(rangeMin, rangeMax);
+    std::uniform_real_distribution<double> dist(0.0f, 1.0f);
+
+    auto InverseCDF = [](double x) -> double
+    {
+        return x * c_pi;
+    };
+
+    auto PDF = [](double x) -> double
+    {
+        return 1.0f / c_pi;
+    };
 
     double estimateSum = 0.0;
     for (size_t i = 1; i <= numSamples; ++i)
     {
-        double x = dist(mt);
+        double rnd = dist(mt);
+        double x = InverseCDF(rnd);
         double y = sin(x)*sin(x);
-        double PDF = 1.0 / c_pi; // uniform random numbers from 0 to pi
-        double estimate = y / PDF;
+        double pdf = PDF(x);
+        double estimate = y / pdf;
 
         estimateSum += estimate;
     }
@@ -213,23 +216,30 @@ double GeneralMonteCarlo()
 
 double ImportanceSampledMonteCarlo()
 {
-    double rangeMin = 0;
-    double rangeMax = 3.14159265359;
-
     size_t numSamples = 10000;
 
     std::random_device rd;
     std::mt19937 mt(rd());
     std::uniform_real_distribution<double> dist(0.0, 1.0);
 
+    auto InverseCDF = [](double x) -> double
+    {
+        return 2.0 * asin(sqrt(x));
+    };
+
+    auto PDF = [](double x) -> double
+    {
+        return sin(x) / 2.0f;
+    };
+
     double estimateSum = 0.0;
     for (size_t i = 1; i <= numSamples; ++i)
     {
         double rng = dist(mt);
-        double x = 2.0 * asin(sqrt(rng));
+        double x = InverseCDF(rng);
         double y = sin(x)*sin(x);
-        double PDF = sin(x) / 2.0f;
-        double estimate = y / PDF;
+        double pdf = PDF(x);
+        double estimate = y / pdf;
 
         estimateSum += estimate;
     }
@@ -246,13 +256,15 @@ void Test_MC()
     printf("Integrating %s from %f to %f\nThe actual answer is %f\n", FUNCTION::Name(), c_rangeMin, c_rangeMax, actualAnswer);
     printf("Doing Monte Carlo integration with %zu samples:\n", c_numSamples);
 
+    std::uniform_real_distribution<double> dist(c_rangeMin, c_rangeMax);
+
     double range = c_rangeMax - c_rangeMin;
     double integration = 0.0;
     double averageDifferenceSquared = 0.0;
     for (size_t i = 1; i <= c_numSamples; ++i)
     {
         // integrate
-        double x = g_dist_rangeMin_rangeMax(g_mt);
+        double x = dist(g_mt);
         double estimate = FUNCTION::F(x) * range;
         integration = Lerp(integration, estimate, 1.0 / double(i));
 
@@ -291,7 +303,8 @@ void Test_MC_PDF()
     for (size_t i = 1; i <= c_numSamples; ++i)
     {
         // integrate
-        double x = PDF::Generate();
+        double rnd = g_dist_0_1(g_mt);
+        double x = PDF::InverseCDF(rnd);
         double pdf = PDF::PDF(x);
         double estimate = FUNCTION::F(x) / pdf;
         integration = Lerp(integration, estimate, 1.0 / double(i));
@@ -334,7 +347,6 @@ int main(int argc, char** argv)
     Test_MC_PDF<Function_SinX, PDF_Uniform>();
     Test_MC_PDF<Function_SinX, PDF_SinX>();
 
-    // TODO: make a simple monte carlo with importance sampling
 
 
     /*
